@@ -25,10 +25,20 @@ bitmap AllocateEmptyBitmap(memory_pool* Pool, u32 Width, u32 Height)
     bitmap Result;
     Result.Width = Width;
     Result.Height = Height;
-    Result.Stride = Result.Width * sizeof(Result.Width);
+    Result.Stride = Result.Width;
 
     u32 BitmapSize = Result.Width * Result.Height;
     Result.Data = PushArray(Pool, u32, BitmapSize);
+
+    return Result;
+}
+
+animation_frame* AllocateEmptyAnimationFrame(memory_pool* Pool, u32 BitmapWidth, u32 BitmapHeight)
+{
+    animation_frame* Result = PushStruct(Pool, animation_frame); 
+    Result->Bitmap = AllocateEmptyBitmap(Pool, BitmapWidth, BitmapHeight);
+    Result->NextFrame = 0;
+    Result->PrevFrame = 0;
 
     return Result;
 }
@@ -39,7 +49,7 @@ void FillBitmap(bitmap* Bitmap, u32 Color = 0xFFFFFFFF)
     {
         for(u32 X = 0; X < Bitmap->Width; X++)
         {
-            Bitmap->Data[X + Y * Bitmap->Stride] = 0xFFFFFFFF;
+            Bitmap->Data[X + Y * Bitmap->Stride] = Color;
         }
     }
 }
@@ -88,3 +98,34 @@ layer* AllocateEmptyLayer(memory_pool* Pool)
 }
 #endif
 
+u32 ColorFloatToU32(ImVec4 FloatColor)
+{
+    u32 Result;
+    u32 Red = FloatColor.x * 255;
+    u32 Blue = FloatColor.y * 255;
+    u32 Green = FloatColor.z * 255;
+    u32 Alpha = FloatColor.w * 255;
+
+    Result = (Red << 0) |
+             (Blue << 8) |
+             (Green << 16) |
+             (Alpha << 24);
+
+    return Result;
+}
+
+u32 ColorFloatToU32(f32* FloatColor)
+{
+    u32 Result;
+    u32 Red = FloatColor[0] * 255;
+    u32 Blue = FloatColor[1] * 255;
+    u32 Green = FloatColor[2] * 255;
+    u32 Alpha = FloatColor[3] * 255;
+
+    Result = (Red << 0) |
+             (Blue << 8) |
+             (Green << 16) |
+             (Alpha << 24);
+
+    return Result;
+}

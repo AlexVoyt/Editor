@@ -4,14 +4,14 @@ REM Build for Visual Studio compiler. Run your copy of vcvars32.bat or vcvarsall
 set OUT_DIR=..\Build
 set OUT_EXE=win_main
 set SDL2_DIR="C:\VS_Libs\SDL2-2.0.22"
-set INCLUDES=/I"include" /I"%SDL2_DIR%/include"
+set INCLUDES=/I"include" /I"%SDL2_DIR%/include" /I"lib/ImGuiFileDialog"
 if "%1%" == "full" (
-    @set SOURCES=main.cpp include\imgui*.cpp
+    @set SOURCES=main.cpp include\imgui*.cpp lib\ImGuiFileDialog\ImGuiFileDialog.cpp
     @set LIBS=/LIBPATH:%SDL2_DIR%\VisualC\x64\Release SDL2.lib SDL2main.lib opengl32.lib shell32.lib
 ) else (
     @set SOURCES=main.cpp
     @set LIBS=..\Build\imgui*.obj /LIBPATH:%SDL2_DIR%\VisualC\x64\Release SDL2.lib SDL2main.lib opengl32.lib shell32.lib
 )
 mkdir %OUT_DIR%
-cl /nologo /Zi /Od /MD %INCLUDES% /D UNICODE /D _UNICODE %SOURCES% /Fe%OUT_DIR%/%OUT_EXE%.exe /Fo%OUT_DIR%/ /link %LIBS% /subsystem:console
+cl /nologo /EHsc /Zi /Od /MD %INCLUDES% /D UNICODE /D _UNICODE %SOURCES% /Fe%OUT_DIR%/%OUT_EXE%.exe /Fo%OUT_DIR%/ /link %LIBS% /subsystem:console
 

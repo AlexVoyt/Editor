@@ -4,4 +4,8 @@
 *.ilk
 *.exe
 *.obj
+*.exp
+*.lib
+*.sln
 code/.vs/
+build/.vs/

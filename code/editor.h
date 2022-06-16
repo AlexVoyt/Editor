@@ -16,27 +16,44 @@ struct memory_pool
 
 struct animation_frame
 {
-    bitmap* Bitmap;
+    bitmap Bitmap;
     animation_frame* NextFrame;
+    animation_frame* PrevFrame;
 };
 
 struct layer
 {
-    animation_frame Frame;
-    layer* NextLayer;
+    char Name[32];
+    animation_frame* SelectedFrame;
+    animation_frame* FirstFrame;
+    animation_frame* LastFrame;
 };
 
 struct editor
 {
-    bool ViewportVisible;
-    bool ColorPickerVisible;
-
     memory_pool BitmapPool;
-    layer* FirstLayer;
-    v2 CameraOffset;
-    v2 PixelDim;
+    memory_pool LayerPool;
 
+    char ProjectName[255];
+    u32 Ticks;
+    u32 BitmapWidth;
+    u32 BitmapHeight;
+
+    bool ColorPickerVisible;
+    u32 BitmapBgColor;
+    f32 FloatBitmapBgColor[4];
+    
     u32 CurrentColor;
     f32 FloatColor[4];
+
+    bool ViewportVisible;
+    v2 CameraOffset;
+    v2 PixelDim;
+    layer* FirstLayer;
+
+    bool TimelineVisible;
+    bool Animating;
+    u32 CurrentFrameTicks;
+
 };
 

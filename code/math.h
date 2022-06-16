@@ -93,6 +93,30 @@ s32 Max(s32 A, s32 B)
     }
 }
 
+f32 Min(f32 A, f32 B)
+{
+    if(A < B)
+    {
+        return A;
+    }
+    else
+    {
+        return B;
+    }
+}
+
+f32 Max(f32 A, f32 B)
+{
+    if(A < B)
+    {
+        return B;
+    }
+    else
+    {
+        return A;
+    }
+}
+
 struct rect2
 {
     v2 Min;
@@ -152,6 +176,12 @@ bool InRect(v2 A, rect2 Rect)
     v2 Max = GetMaxCorner(Rect);
     bool Result = (A.x > Min.x) && (A.x < Max.x) && (A.y > Min.y) && (A.y < Max.y);
 
+    return Result;
+}
+
+f32 Clamp(f32 Value, f32 Low, f32 High)
+{
+    f32 Result = Min(High, Max(Low, Value));
     return Result;
 }
 
