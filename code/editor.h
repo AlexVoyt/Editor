@@ -23,7 +23,7 @@ struct animation_frame
 
 struct layer
 {
-    char Name[32];
+    char Name[MaxLayerNameLength + 1];
     animation_frame* SelectedFrame;
     animation_frame* FirstFrame;
     animation_frame* LastFrame;
@@ -34,7 +34,7 @@ struct editor
     memory_pool BitmapPool;
     memory_pool LayerPool;
 
-    char ProjectName[255];
+    char ProjectName[MaxProjectNameLength + 1];
     u32 Ticks;
     u32 BitmapWidth;
     u32 BitmapHeight;

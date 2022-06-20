@@ -33,6 +33,7 @@ typedef float f32;
 enum
 {
     MaxProjectNameLength = 255,
+    MaxLayerNameLength = 32,
 };
 
 #include "math.h"
@@ -193,12 +194,14 @@ int main(int, char**)
                 if(ImGui::MenuItem("Save"))
                 {
                     // TODO: save
+                    // TODO: Disallow saving if we have no layer
+                    ImGuiFileDialog::Instance()->OpenModal("Save project", "Save file", ".paf,.*", ".");
                     printf("Saved (no lul)\n");
                 }
 
                 if(ImGui::MenuItem("Load"))
                 {
-                    ImGuiFileDialog::Instance()->OpenDialog("Load project", "Choose file", ".*", ".");
+                    ImGuiFileDialog::Instance()->OpenModal("Load project", "Load file", ".paf,.*", ".");
                     printf("Loaded (no lul)\n");
                 }
                 ImGui::EndMenu();
@@ -218,6 +221,110 @@ int main(int, char**)
 
         if(ImGuiFileDialog::Instance()->Display("Load project"))
         {
+            if (ImGuiFileDialog::Instance()->IsOk())
+            {
+                std::string FilePathName = ImGuiFileDialog::Instance()->GetFilePathName();
+
+                FILE* File = fopen(FilePathName.c_str(), "rb");
+                if(File)
+                {
+                    u8 MagicHeader[4];
+
+                    fread(MagicHeader, sizeof(MagicHeader), 1, File);
+                    if(MagicHeader[0] == 'P' &&
+                       MagicHeader[1] == 'A' &&
+                       MagicHeader[2] == 'F' &&
+                       MagicHeader[3] == '0')
+                    {
+                        ZeroMemory(Editor.BitmapPool.Base, Editor.BitmapPool.Used);
+                        Editor.BitmapPool.Used = 0;
+                        ZeroMemory(Editor.LayerPool.Base, Editor.LayerPool.Used);
+                        Editor.LayerPool.Used = 0;
+                        
+                        fread(Editor.ProjectName, sizeof(Editor.ProjectName), 1, File);
+                        fread(Editor.ProjectName, sizeof(Editor.ProjectName), 1, File);
+                        fread(&Editor.BitmapWidth, sizeof(Editor.BitmapWidth), 1, File);
+                        fread(&Editor.BitmapHeight, sizeof(Editor.BitmapHeight), 1, File);                
+
+                        Editor.FirstLayer = PushStruct(&Editor.LayerPool, layer);
+                        Editor.FirstLayer->FirstFrame = Editor.FirstLayer->LastFrame = Editor.FirstLayer->SelectedFrame = 0;
+                        fread(Editor.FirstLayer->Name, sizeof(Editor.FirstLayer->Name), 1, File);
+                        while(!feof(File))
+                        {
+                            animation_frame* Frame = AllocateEmptyAnimationFrame(&Editor.BitmapPool, Editor.BitmapWidth, Editor.BitmapHeight);
+                            fread(&Frame->Bitmap.Width, sizeof(Frame->Bitmap.Width), 1, File);
+                            fread(&Frame->Bitmap.Height, sizeof(Frame->Bitmap.Height), 1, File);
+                            fread(&Frame->Bitmap.Stride, sizeof(Frame->Bitmap.Stride), 1, File);
+                            fread(&Frame->Bitmap.Data, Frame->Bitmap.Width * Frame->Bitmap.Height * sizeof(*Frame->Bitmap.Data), 1, File);
+                            if(Editor.FirstLayer->LastFrame)
+                            {
+                                Frame->PrevFrame = Editor.FirstLayer->LastFrame;
+                                Editor.FirstLayer->LastFrame->NextFrame = Frame;
+                                Editor.FirstLayer->LastFrame = Frame;
+                            }
+                            else
+                            {
+                                Editor.FirstLayer->SelectedFrame = Editor.FirstLayer->FirstFrame = Editor.FirstLayer->LastFrame = Frame;
+                            }
+                                                        
+                        }
+                    }
+                    else
+                    {
+                        // TODO: proper error handling
+                        Assert(0 && "Wrong magic header");
+                    }
+
+                    fclose(File);
+                }
+
+            }
+            ImGuiFileDialog::Instance()->Close();
+        }
+
+        if(ImGuiFileDialog::Instance()->Display("Save project"))
+        {
+            if (ImGuiFileDialog::Instance()->IsOk())
+            {
+                std::string FilePathName = ImGuiFileDialog::Instance()->GetFilePathName();
+                u8 MagicHeader[4] = {'P', 'A', 'F', '0'};
+
+                FILE* File = fopen(FilePathName.c_str(), "wb");
+                if(File)
+                {
+                    // TODO: this is probably very inefficient (maybe not, if fwrite using buffering)
+                    fwrite(MagicHeader, sizeof(MagicHeader), 1, File);
+                    fwrite(Editor.ProjectName, sizeof(Editor.ProjectName), 1, File);
+                    fwrite(&Editor.BitmapWidth, sizeof(Editor.BitmapWidth), 1, File);
+                    fwrite(&Editor.BitmapHeight, sizeof(Editor.BitmapHeight), 1, File);
+
+                    // Saving each layer(for now we have only one)
+                    // TODO: now we are saving full buffer, even if name length is less than buffer length,
+                    // probably should switch to length + name
+                    layer* Layer = Editor.FirstLayer;
+                    Assert(Layer && "In save project - no layer found");
+                    fwrite(Layer->Name, sizeof(Layer->Name), 1, File);
+                    animation_frame* Frame = Layer->FirstFrame;
+                    while(Frame)
+                    {
+                        fwrite(&Frame->Bitmap.Width, sizeof(Frame->Bitmap.Width), 1, File);
+                        fwrite(&Frame->Bitmap.Height, sizeof(Frame->Bitmap.Height), 1, File);
+                        fwrite(&Frame->Bitmap.Stride, sizeof(Frame->Bitmap.Stride), 1, File);
+                        fwrite(Frame->Bitmap.Data, Frame->Bitmap.Width * Frame->Bitmap.Height * sizeof(*Frame->Bitmap.Data), 1, File);   
+                        
+                        Frame = Frame->NextFrame;
+                    }
+
+                    fclose(File);
+                    printf("File Saved!\n");
+                }
+                else
+                {
+                    // TODO: error handling
+                    Assert(0 && "Error during saving file");
+                }
+
+            }
             ImGuiFileDialog::Instance()->Close();
         }
 
@@ -228,10 +335,9 @@ int main(int, char**)
             ImGui::SetNextWindowPos(Center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
         }
 
-            
         if(ImGui::BeginPopupModal("New Project", NULL, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            static char NewName[255] = {};
+            static char NewName[MaxProjectNameLength + 1] = {};
             static s32 NewWidth = 4;
             static s32 NewHeight = 4;
             
@@ -445,7 +551,7 @@ int main(int, char**)
             ImGui::End();
         }
 
-        ImGui::ShowDemoWindow();
+        // ImGui::ShowDemoWindow();
 
         // Rendering
         ImGui::Render();
