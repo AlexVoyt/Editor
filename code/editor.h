@@ -3,7 +3,6 @@ struct bitmap
     u32 Width;
     u32 Height;
     u32 Stride;
-
     u32* Data;
 };
 
@@ -38,11 +37,14 @@ struct editor
     u32 Ticks;
     u32 BitmapWidth;
     u32 BitmapHeight;
+    u32 BitmapCount;
+    bitmap Bitmaps[10000];
 
-    bool ColorPickerVisible;
+    bool ToolsVisible;
+    u32 SelectedPaletteSlot;
+    u32 Palette[5*5];
     u32 BitmapBgColor;
     f32 FloatBitmapBgColor[4];
-    
     u32 CurrentColor;
     f32 FloatColor[4];
 

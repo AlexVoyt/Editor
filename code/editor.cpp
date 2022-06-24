@@ -1,5 +1,17 @@
 #include "editor.h"
 
+void UpdateWindowTitle(SDL_Window* Window, editor* Editor)
+{
+    // TODO: think better
+    char Buffer[1024] = {};
+    char* Cursor = &Buffer[0];
+    strcpy(Cursor, "Editor - ");
+    Cursor += sizeof("Editor - ") - 1;
+    strcpy(Cursor, Editor->ProjectName);
+
+    SDL_SetWindowTitle(Window, Buffer);
+}
+
 void InitializePool(memory_pool* Pool, u8* Base, size_t Size)
 {
     Pool->Base = Base;
@@ -35,7 +47,7 @@ bitmap AllocateEmptyBitmap(memory_pool* Pool, u32 Width, u32 Height)
 
 animation_frame* AllocateEmptyAnimationFrame(memory_pool* Pool, u32 BitmapWidth, u32 BitmapHeight)
 {
-    animation_frame* Result = PushStruct(Pool, animation_frame); 
+    animation_frame* Result = PushStruct(Pool, animation_frame);
     Result->Bitmap = AllocateEmptyBitmap(Pool, BitmapWidth, BitmapHeight);
     Result->NextFrame = 0;
     Result->PrevFrame = 0;
@@ -128,4 +140,17 @@ u32 ColorFloatToU32(f32* FloatColor)
              (Alpha << 24);
 
     return Result;
+}
+
+void ColorU32ToFloat(f32* FloatColor, u32 Color)
+{
+    u8 Red = Color >> 0;
+    u8 Blue = Color >> 8;
+    u8 Green = Color >> 16;
+    u8 Alpha = Color >> 24;
+
+    FloatColor[0] = (f32)Red / 255;
+    FloatColor[1] = (f32)Blue / 255;
+    FloatColor[2] = (f32)Green / 255;
+    FloatColor[3] = (f32)Alpha / 255;
 }

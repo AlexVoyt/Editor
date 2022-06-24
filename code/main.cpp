@@ -30,7 +30,7 @@ typedef int64_t s64;
 
 typedef float f32;
 
-enum
+enum constants
 {
     MaxProjectNameLength = 255,
     MaxLayerNameLength = 32,
@@ -39,6 +39,8 @@ enum
 #include "math.h"
 #include "editor.cpp"
 #include "paf.cpp"
+
+#define ArrayCount(Array) sizeof((Array))/sizeof((Array)[0])
 
 // Main code
 int main(int, char**)
@@ -81,9 +83,9 @@ int main(int, char**)
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
     SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
-    SDL_Window* window = SDL_CreateWindow("Editor", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
-    SDL_GLContext gl_context = SDL_GL_CreateContext(window);
-    SDL_GL_MakeCurrent(window, gl_context);
+    SDL_Window* Window = SDL_CreateWindow("Editor - <no project>", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
+    SDL_GLContext gl_context = SDL_GL_CreateContext(Window);
+    SDL_GL_MakeCurrent(Window, gl_context);
     SDL_GL_SetSwapInterval(1); // Enable vsync
 
     // Setup Dear ImGui context
@@ -97,7 +99,7 @@ int main(int, char**)
     ImGui::StyleColorsDark();
 
     // Setup Platform/Renderer backends
-    ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
+    ImGui_ImplSDL2_InitForOpenGL(Window, gl_context);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
     // Load Fonts
@@ -120,15 +122,15 @@ int main(int, char**)
     Editor.CameraOffset = V2(0, 0);
     Editor.PixelDim = V2(16, 16);
     Editor.ViewportVisible = true;
-    Editor.ColorPickerVisible = true;
+    Editor.ToolsVisible = true;
     Editor.TimelineVisible = true;
 
     Editor.BitmapWidth = 16;
     Editor.BitmapHeight = 16;
-    
-    Editor.FloatColor[0] = 0.0;
-    Editor.FloatColor[1] = 0.0;
-    Editor.FloatColor[2] = 0.0;
+
+    Editor.FloatColor[0] = 1.0;
+    Editor.FloatColor[1] = 1.0;
+    Editor.FloatColor[2] = 1.0;
     Editor.FloatColor[3] = 1.0;
     Editor.CurrentColor = ColorFloatToU32(Editor.FloatColor);
 
@@ -137,6 +139,11 @@ int main(int, char**)
     Editor.FloatBitmapBgColor[2] = 0.3;
     Editor.FloatBitmapBgColor[3] = 1.0;
     Editor.BitmapBgColor = ColorFloatToU32(Editor.FloatBitmapBgColor);
+
+    for(u32 PIndex = 0; PIndex < ArrayCount(Editor.Palette); PIndex++)
+    {
+        Editor.Palette[PIndex] = 0xFFFFFFFF;
+    }
 
     Editor.Ticks = SDL_GetTicks();
 
@@ -169,7 +176,7 @@ int main(int, char**)
                 } break;
             }
 
-            if(Event.type == SDL_WINDOWEVENT && Event.window.event == SDL_WINDOWEVENT_CLOSE && Event.window.windowID == SDL_GetWindowID(window))
+            if(Event.type == SDL_WINDOWEVENT && Event.window.event == SDL_WINDOWEVENT_CLOSE && Event.window.windowID == SDL_GetWindowID(Window))
                 Running = false;
         }
 
@@ -210,7 +217,7 @@ int main(int, char**)
             if(ImGui::BeginMenu("Windows"))
             {
                 if(ImGui::MenuItem("Viewport", NULL, &Editor.ViewportVisible)) {}
-                if(ImGui::MenuItem("Color Picker", NULL, &Editor.ColorPickerVisible)) {}
+                if(ImGui::MenuItem("Color Picker", NULL, &Editor.ToolsVisible)) {}
                 if(ImGui::MenuItem("Timeline", NULL, &Editor.TimelineVisible)) {}
                 ImGui::EndMenu();
             }
@@ -240,11 +247,10 @@ int main(int, char**)
                         Editor.BitmapPool.Used = 0;
                         ZeroMemory(Editor.LayerPool.Base, Editor.LayerPool.Used);
                         Editor.LayerPool.Used = 0;
-                        
-                        fread(Editor.ProjectName, sizeof(Editor.ProjectName), 1, File);
+
                         fread(Editor.ProjectName, sizeof(Editor.ProjectName), 1, File);
                         fread(&Editor.BitmapWidth, sizeof(Editor.BitmapWidth), 1, File);
-                        fread(&Editor.BitmapHeight, sizeof(Editor.BitmapHeight), 1, File);                
+                        fread(&Editor.BitmapHeight, sizeof(Editor.BitmapHeight), 1, File);
 
                         Editor.FirstLayer = PushStruct(&Editor.LayerPool, layer);
                         Editor.FirstLayer->FirstFrame = Editor.FirstLayer->LastFrame = Editor.FirstLayer->SelectedFrame = 0;
@@ -255,7 +261,7 @@ int main(int, char**)
                             fread(&Frame->Bitmap.Width, sizeof(Frame->Bitmap.Width), 1, File);
                             fread(&Frame->Bitmap.Height, sizeof(Frame->Bitmap.Height), 1, File);
                             fread(&Frame->Bitmap.Stride, sizeof(Frame->Bitmap.Stride), 1, File);
-                            fread(&Frame->Bitmap.Data, Frame->Bitmap.Width * Frame->Bitmap.Height * sizeof(*Frame->Bitmap.Data), 1, File);
+                            fread(Frame->Bitmap.Data, Frame->Bitmap.Width * Frame->Bitmap.Height * sizeof(*Frame->Bitmap.Data), 1, File);
                             if(Editor.FirstLayer->LastFrame)
                             {
                                 Frame->PrevFrame = Editor.FirstLayer->LastFrame;
@@ -266,8 +272,10 @@ int main(int, char**)
                             {
                                 Editor.FirstLayer->SelectedFrame = Editor.FirstLayer->FirstFrame = Editor.FirstLayer->LastFrame = Frame;
                             }
-                                                        
+
                         }
+
+                        UpdateWindowTitle(Window, &Editor);
                     }
                     else
                     {
@@ -292,7 +300,6 @@ int main(int, char**)
                 FILE* File = fopen(FilePathName.c_str(), "wb");
                 if(File)
                 {
-                    // TODO: this is probably very inefficient (maybe not, if fwrite using buffering)
                     fwrite(MagicHeader, sizeof(MagicHeader), 1, File);
                     fwrite(Editor.ProjectName, sizeof(Editor.ProjectName), 1, File);
                     fwrite(&Editor.BitmapWidth, sizeof(Editor.BitmapWidth), 1, File);
@@ -310,8 +317,8 @@ int main(int, char**)
                         fwrite(&Frame->Bitmap.Width, sizeof(Frame->Bitmap.Width), 1, File);
                         fwrite(&Frame->Bitmap.Height, sizeof(Frame->Bitmap.Height), 1, File);
                         fwrite(&Frame->Bitmap.Stride, sizeof(Frame->Bitmap.Stride), 1, File);
-                        fwrite(Frame->Bitmap.Data, Frame->Bitmap.Width * Frame->Bitmap.Height * sizeof(*Frame->Bitmap.Data), 1, File);   
-                        
+                        fwrite(Frame->Bitmap.Data, Frame->Bitmap.Width * Frame->Bitmap.Height * sizeof(*Frame->Bitmap.Data), 1, File);
+
                         Frame = Frame->NextFrame;
                     }
 
@@ -340,7 +347,7 @@ int main(int, char**)
             static char NewName[MaxProjectNameLength + 1] = {};
             static s32 NewWidth = 4;
             static s32 NewHeight = 4;
-            
+
             ImGui::InputText("Project Name:", NewName, sizeof(NewName));
             ImGui::InputInt("Bitmap Width", &NewWidth);
             ImGui::InputInt("Bitmap Height", &NewHeight);
@@ -351,11 +358,11 @@ int main(int, char**)
 
             // TODO: Explain why we cant create new project
             bool DisableOk = DisableOkWidth || DisableOkHeight || DisableOkName;
-            
+
             if(DisableOk)
                 ImGui::BeginDisabled();
 
-            if(ImGui::Button("OK", ImVec2(120, 0))) 
+            if(ImGui::Button("OK", ImVec2(120, 0)))
             {
                 ZeroMemory(Editor.ProjectName, sizeof(Editor.ProjectName));
                 Editor.BitmapWidth = NewWidth;
@@ -372,21 +379,23 @@ int main(int, char**)
                 animation_frame* Frame = AllocateEmptyAnimationFrame(&Editor.BitmapPool, Editor.BitmapWidth, Editor.BitmapHeight);
                 Editor.FirstLayer->SelectedFrame = Editor.FirstLayer->FirstFrame = Editor.FirstLayer->LastFrame = Frame;
                 FillBitmap(&Editor.FirstLayer->FirstFrame->Bitmap, 0x00000000);
+                UpdateWindowTitle(Window, &Editor);
 
                 NewWidth = 4;
                 NewHeight = 4;
                 ZeroMemory(NewName, sizeof(NewName));
-                ImGui::CloseCurrentPopup(); 
+
+                ImGui::CloseCurrentPopup();
             }
 
             if(DisableOk)
                 ImGui::EndDisabled();
 
             if (ImGui::Button("Cancel", ImVec2(120, 0))) { ImGui::CloseCurrentPopup(); }
-            
+
             ImGui::EndPopup();
         }
-        
+
 
         if(Editor.ViewportVisible)
         {
@@ -406,7 +415,7 @@ int main(int, char**)
                     f32 MinPixelDim = 10;
                     f32 MaxPixelDim = 50;
                     NewDim = Clamp(NewDim, MinPixelDim, MaxPixelDim);
-                    
+
                     Editor.PixelDim = V2(NewDim, NewDim);
                 }
 
@@ -456,22 +465,67 @@ int main(int, char**)
                         }
                     }
                 }
-                
+
             }
             ImGui::End();
         }
 
-        if(Editor.ColorPickerVisible)
+        if(Editor.ToolsVisible)
         {
-            if(ImGui::Begin("Color Picker", &Editor.ColorPickerVisible))
+            if(ImGui::Begin("Tools", &Editor.ToolsVisible))
             {
-                ImGui::ColorPicker4("EditorColor##4", (f32 *)&Editor.FloatColor);
-                Editor.CurrentColor = ColorFloatToU32(*(ImVec4* )&Editor.FloatColor);
+                if(ImGui::CollapsingHeader("Palette"))
+                {
+                    f32 FloatColor[4] = {1, 1, 1, 1};
+                    u32 CurrentColor = Editor.Palette[Editor.SelectedPaletteSlot];
+                    ColorU32ToFloat(FloatColor, CurrentColor);
 
-                ImGui::ColorPicker4("BitmapBgColor##4", (f32 *)&Editor.FloatBitmapBgColor);
-                Editor.BitmapBgColor = ColorFloatToU32(*(ImVec4* )&Editor.FloatBitmapBgColor);
+                    ImGui::ColorPicker4("EditorColor##4", FloatColor);
+                    Editor.CurrentColor = ColorFloatToU32(FloatColor);
+                    Editor.Palette[Editor.SelectedPaletteSlot] = ColorFloatToU32(FloatColor);
+
+                    if(ImGui::BeginTable("Palette", 5, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_Borders))
+                    {
+                        for(u32 Y = 0; Y < 5; Y++)
+                        {
+                            for(u32 X = 0; X < 5; X++)
+                            {
+                                u32 Index = Y*5 + X;
+                                ImGui::TableNextColumn();
+                                ImGui::PushID(Index);
+                                if(ImGui::Selectable("", Editor.SelectedPaletteSlot == (Index), 0, ImVec2(ImGui::GetContentRegionAvail().x, 20)))
+                                {
+                                    Editor.SelectedPaletteSlot = Y*5 + X;
+                                }
+
+                                ImVec2 Min = ImGui::GetItemRectMin();
+                                ImVec2 Max = ImGui::GetItemRectMax();
+                                // TODO: shrink rect a little bit so we can see table borders
+                                // we can think about these a little bit later
+                                Min.x += 1;
+                                Min.y += 1;
+                                Max.x -= 1;
+                                Max.y -= 1;
+                                ImGui::GetWindowDrawList()->AddRectFilled(Min, Max, Editor.Palette[Index]);
+
+                                ImGui::PopID();
+                            }
+                        }
+                        ImGui::EndTable();
+                    }
+                }
+
+                if(ImGui::CollapsingHeader("Bitmap Background"))
+                {
+                    ImGui::ColorPicker4("BitmapBgColor##4", (f32 *)&Editor.FloatBitmapBgColor);
+                    Editor.BitmapBgColor = ColorFloatToU32((f32 *)&Editor.FloatBitmapBgColor);
+                }
+
+                if(ImGui::CollapsingHeader("Tools"))
+                {
+                }
             }
-            
+
             ImGui::End();
         }
 
@@ -486,7 +540,7 @@ int main(int, char**)
                     {
                         if(ImGui::Button("Stop"))
                         {
-                            Editor.Animating = !Editor.Animating; 
+                            Editor.Animating = !Editor.Animating;
                         }
                     }
                     else
@@ -494,7 +548,7 @@ int main(int, char**)
                         if(ImGui::Button("Start"))
                         {
                             Editor.Animating = !Editor.Animating;
-                            Editor.CurrentFrameTicks = Editor.Ticks; 
+                            Editor.CurrentFrameTicks = Editor.Ticks;
                         }
                     }
 
@@ -503,7 +557,7 @@ int main(int, char**)
                     animation_frame* Frame = Layer->FirstFrame;
                     u32 FrameCount = 1;
                     char FrameCountStr[3];
-                    
+
                     while(Frame)
                     {
                         snprintf(FrameCountStr, sizeof(FrameCountStr), "%d", FrameCount);
@@ -513,7 +567,7 @@ int main(int, char**)
                         {
                             Layer->SelectedFrame = Frame;
                         }
-                        
+
                         FrameCount++;
                         Frame = Frame->NextFrame;
                         ImGui::SameLine();
@@ -530,7 +584,7 @@ int main(int, char**)
                     if(Editor.Animating)
                     {
                         u32 FrameTimeMs = 250;
-                        u32 Difference = Editor.Ticks - Editor.CurrentFrameTicks; 
+                        u32 Difference = Editor.Ticks - Editor.CurrentFrameTicks;
                         if(Difference >= FrameTimeMs)
                         {
                             Editor.CurrentFrameTicks = Editor.Ticks;
@@ -545,13 +599,13 @@ int main(int, char**)
                         }
                     }
                 }
-                   
+
             }
 
             ImGui::End();
         }
 
-        // ImGui::ShowDemoWindow();
+        ImGui::ShowDemoWindow();
 
         // Rendering
         ImGui::Render();
@@ -559,7 +613,7 @@ int main(int, char**)
         glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        SDL_GL_SwapWindow(window);
+        SDL_GL_SwapWindow(Window);
 
         Editor.Ticks = SDL_GetTicks();
     }
@@ -570,7 +624,7 @@ int main(int, char**)
     ImGui::DestroyContext();
 
     SDL_GL_DeleteContext(gl_context);
-    SDL_DestroyWindow(window);
+    SDL_DestroyWindow(Window);
     SDL_Quit();
 
     return 0;
