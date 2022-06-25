@@ -1,8 +1,13 @@
+enum bitmap_type
+{
+    BitmapType_Plain,
+    BitmapType_LUT,
+    BitmapType_LightProfile,
+};
+
 struct bitmap
 {
-    u32 Width;
-    u32 Height;
-    u32 Stride;
+    bitmap_type Type;
     u32* Data;
 };
 
@@ -15,30 +20,35 @@ struct memory_pool
 
 struct animation_frame
 {
-    bitmap Bitmap;
-    animation_frame* NextFrame;
-    animation_frame* PrevFrame;
+    u32 BitmapIndex;
+};
+
+enum layer_type
+{
+    LayerType_Plain,
+    LayerType_LUT,
+    LayerType_LightProfile,
 };
 
 struct layer
 {
+    layer_type Type;
     char Name[MaxLayerNameLength + 1];
-    animation_frame* SelectedFrame;
-    animation_frame* FirstFrame;
-    animation_frame* LastFrame;
+
+    u32 FrameCount;
+    animation_frame Frames[16];
 };
 
 struct editor
 {
     memory_pool BitmapPool;
-    memory_pool LayerPool;
-
     char ProjectName[MaxProjectNameLength + 1];
     u32 Ticks;
     u32 BitmapWidth;
     u32 BitmapHeight;
+
     u32 BitmapCount;
-    bitmap Bitmaps[10000];
+    bitmap Bitmaps[4096];
 
     bool ToolsVisible;
     u32 SelectedPaletteSlot;
@@ -51,7 +61,12 @@ struct editor
     bool ViewportVisible;
     v2 CameraOffset;
     v2 PixelDim;
-    layer* FirstLayer;
+
+    // TODO: multiple layers
+    u32 SelectedFrameIndex;
+
+    u32 LayerCount;
+    layer Layers[16];
 
     bool TimelineVisible;
     bool Animating;

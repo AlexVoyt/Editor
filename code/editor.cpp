@@ -32,44 +32,126 @@ void* PushSize_(memory_pool* Pool, size_t Size)
     return Result;
 }
 
-bitmap AllocateEmptyBitmap(memory_pool* Pool, u32 Width, u32 Height)
+u32 AllocateEmptyBitmap(editor* Editor, bitmap_type Type)
 {
-    bitmap Result;
-    Result.Width = Width;
-    Result.Height = Height;
-    Result.Stride = Result.Width;
-
-    u32 BitmapSize = Result.Width * Result.Height;
-    Result.Data = PushArray(Pool, u32, BitmapSize);
-
-    return Result;
-}
-
-animation_frame* AllocateEmptyAnimationFrame(memory_pool* Pool, u32 BitmapWidth, u32 BitmapHeight)
-{
-    animation_frame* Result = PushStruct(Pool, animation_frame);
-    Result->Bitmap = AllocateEmptyBitmap(Pool, BitmapWidth, BitmapHeight);
-    Result->NextFrame = 0;
-    Result->PrevFrame = 0;
-
-    return Result;
-}
-
-void FillBitmap(bitmap* Bitmap, u32 Color = 0xFFFFFFFF)
-{
-    for(u32 Y = 0; Y < Bitmap->Height; Y++)
+    u32 BitmapIndex = Editor->BitmapCount;
+    if(BitmapIndex < ArrayCount(Editor->Bitmaps))
     {
-        for(u32 X = 0; X < Bitmap->Width; X++)
+        Editor->BitmapCount++;
+
+        bitmap* Bitmap = &Editor->Bitmaps[BitmapIndex];
+        Bitmap->Type = Type;
+
+        u32 BitmapSize = Editor->BitmapWidth * Editor->BitmapHeight;
+        Bitmap->Data = PushArray(&Editor->BitmapPool, u32, BitmapSize);
+    }
+    else
+    {
+        InvalidCodePath;
+    }
+
+    return BitmapIndex;
+}
+
+layer NewEmptyLayer(layer_type Type)
+{
+    layer Result = {};
+    Result.Type = Type;
+
+    return Result;
+}
+
+layer* AddLayer(editor* Editor, layer_type Type)
+{
+    layer* Result = 0;
+    if(Editor->LayerCount < ArrayCount(Editor->Layers))
+    {
+        u32 LayerIndex = Editor->LayerCount;
+        Editor->LayerCount++;
+
+        Result = &Editor->Layers[LayerIndex];
+        *Result = NewEmptyLayer(Type);
+    }
+    else
+    {
+        InvalidCodePath;
+    }
+
+    return Result;
+}
+
+bool AddFrameToLayer(layer* Layer, animation_frame Frame)
+{
+    bool Added = false;
+    if(Layer->FrameCount < ArrayCount(Layer->Frames))
+    {
+        Layer->Frames[Layer->FrameCount++] = Frame;
+        Added = true;
+    }
+
+    return Added;
+}
+
+#if 0
+u32 AddBitmap(editor* Editor, bitmap_type Type)
+{
+    u32 BitmapIndex = Editor->BitmapCount;
+    void* Bitmap = PushSize_(&Editor->BitmapPool, sizeof(bitmap_type));
+
+    Editor->Bitmaps[BitmapIndex].Type = Type;
+    Editor->Bitmaps[BitmapIndex].Data = Type;
+    Bitmap.Type
+}
+#endif
+
+bitmap* GetBitmapByIndex(editor* Editor, u32 BitmapIndex)
+{
+    bitmap* Result = 0;
+    if(BitmapIndex < Editor->BitmapCount)
+    {
+        Result = &Editor->Bitmaps[BitmapIndex];
+    }
+    else
+    {
+        InvalidCodePath;
+    }
+
+    return Result;
+}
+
+void FillBitmap(editor* Editor, u32 BitmapIndex, u32 Color = 0xFFFFFFFF)
+{
+    bitmap* Bitmap = GetBitmapByIndex(Editor, BitmapIndex);
+    u32 Stride = Editor->BitmapWidth;
+    for(u32 Y = 0; Y < Editor->BitmapHeight; Y++)
+    {
+        for(u32 X = 0; X < Editor->BitmapWidth; X++)
         {
-            Bitmap->Data[X + Y * Bitmap->Stride] = Color;
+            Bitmap->Data[X + Y * Stride] = Color;
         }
     }
 }
 
-rect2 GetBitmapRectTranslated(bitmap* Bitmap, v2 PixelDim, v2 Offset)
+animation_frame GetFrameByIndex(layer* Layer, u32 Index)
+{
+    animation_frame Result = {};
+    if(Index < ArrayCount(Layer->Frames))
+    {
+        Result = Layer->Frames[Index];
+    }
+    else
+    {
+        InvalidCodePath;
+    }
+
+    return Result;
+}
+
+rect2 GetBitmapRectTranslated(editor* Editor, v2 Offset)
 {
     v2 Min = V2(0, 0);
-    v2 Max = V2(Bitmap->Width * PixelDim.x, Bitmap->Height * PixelDim.y);
+    v2 Max = V2(Editor->BitmapWidth * Editor->PixelDim.x,
+                Editor->BitmapHeight * Editor->PixelDim.y);
     Min = Min + Offset;
     Max = Max + Offset;
     rect2 Result = RectMinMax(Min, Max);
@@ -77,26 +159,35 @@ rect2 GetBitmapRectTranslated(bitmap* Bitmap, v2 PixelDim, v2 Offset)
     return Result;
 }
 
-u32 GetPixelColor(bitmap* Bitmap, u32 X, u32 Y)
+u32 GetPixelColor(bitmap* Bitmap, u32 Width, u32 Height, u32 X, u32 Y)
 {
-    Assert(X < Bitmap->Width);
-    Assert(Y < Bitmap->Height);
+    u32 Stride = Width;
+    Assert(X < Width);
+    Assert(Y < Height);
 
-    u32 Result = Bitmap->Data[X + Y * Bitmap->Stride];
+    u32 Result = Bitmap->Data[X + Y * Stride];
     return Result;
 }
 
-u32 GetPixelColor(bitmap* Bitmap, v2 Index)
+u32 GetPixelColor(editor* Editor, u32 BitmapIndex, u32 X, u32 Y)
 {
-    return GetPixelColor(Bitmap, Index.x, Index.y);
+    bitmap* Bitmap = GetBitmapByIndex(Editor, BitmapIndex);
+    return GetPixelColor(Bitmap, Editor->BitmapWidth, Editor->BitmapHeight, X, Y);
 }
 
-void SetPixelColor(bitmap* Bitmap, u32 X, u32 Y, u32 Color)
+void SetPixelColor(bitmap* Bitmap, u32 Width, u32 Height, u32 X, u32 Y, u32 Color)
 {
-    Assert(X < Bitmap->Width);
-    Assert(Y < Bitmap->Height);
+    u32 Stride = Width;
+    Assert(X < Width);
+    Assert(Y < Height);
 
-    Bitmap->Data[X + Y * Bitmap->Stride] = Color;
+    Bitmap->Data[X + Y * Stride] = Color;
+}
+
+void SetPixelColor(editor* Editor, u32 BitmapIndex, u32 X, u32 Y, u32 Color)
+{
+    bitmap* Bitmap = GetBitmapByIndex(Editor, BitmapIndex);
+    SetPixelColor(Bitmap, Editor->BitmapWidth, Editor->BitmapHeight, X, Y, Color);
 }
 
 #if 0

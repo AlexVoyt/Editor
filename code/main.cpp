@@ -36,11 +36,13 @@ enum constants
     MaxLayerNameLength = 32,
 };
 
+#define ArrayCount(Array) sizeof((Array))/sizeof((Array)[0])
+#define InvalidCodePath Assert(!"Invalid code path!")
+
 #include "math.h"
 #include "editor.cpp"
 #include "paf.cpp"
 
-#define ArrayCount(Array) sizeof((Array))/sizeof((Array)[0])
 
 // Main code
 int main(int, char**)
@@ -113,11 +115,9 @@ int main(int, char**)
 
     u32 MemorySize = 1024*1024*512;
     void* MemoryBase = malloc(MemorySize);
-    u32 BitmapMemorySize = 1024*1024*400;
 
     editor Editor = {};
-    InitializePool(&Editor.BitmapPool, (u8* )MemoryBase, BitmapMemorySize);
-    InitializePool(&Editor.LayerPool, (u8* )MemoryBase + BitmapMemorySize, MemorySize - BitmapMemorySize);
+    InitializePool(&Editor.BitmapPool, (u8* )MemoryBase, MemorySize);
 
     Editor.CameraOffset = V2(0, 0);
     Editor.PixelDim = V2(16, 16);
@@ -235,6 +235,7 @@ int main(int, char**)
                 FILE* File = fopen(FilePathName.c_str(), "rb");
                 if(File)
                 {
+#if 0
                     u8 MagicHeader[4];
 
                     fread(MagicHeader, sizeof(MagicHeader), 1, File);
@@ -245,8 +246,6 @@ int main(int, char**)
                     {
                         ZeroMemory(Editor.BitmapPool.Base, Editor.BitmapPool.Used);
                         Editor.BitmapPool.Used = 0;
-                        ZeroMemory(Editor.LayerPool.Base, Editor.LayerPool.Used);
-                        Editor.LayerPool.Used = 0;
 
                         fread(Editor.ProjectName, sizeof(Editor.ProjectName), 1, File);
                         fread(&Editor.BitmapWidth, sizeof(Editor.BitmapWidth), 1, File);
@@ -283,6 +282,7 @@ int main(int, char**)
                         Assert(0 && "Wrong magic header");
                     }
 
+#endif
                     fclose(File);
                 }
 
@@ -300,6 +300,7 @@ int main(int, char**)
                 FILE* File = fopen(FilePathName.c_str(), "wb");
                 if(File)
                 {
+#if 0
                     fwrite(MagicHeader, sizeof(MagicHeader), 1, File);
                     fwrite(Editor.ProjectName, sizeof(Editor.ProjectName), 1, File);
                     fwrite(&Editor.BitmapWidth, sizeof(Editor.BitmapWidth), 1, File);
@@ -322,8 +323,8 @@ int main(int, char**)
                         Frame = Frame->NextFrame;
                     }
 
+#endif
                     fclose(File);
-                    printf("File Saved!\n");
                 }
                 else
                 {
@@ -371,14 +372,16 @@ int main(int, char**)
 
                 ZeroMemory(Editor.BitmapPool.Base, Editor.BitmapPool.Used);
                 Editor.BitmapPool.Used = 0;
-                ZeroMemory(Editor.LayerPool.Base, Editor.LayerPool.Used);
-                Editor.LayerPool.Used = 0;
 
-                Editor.FirstLayer = PushStruct(&Editor.LayerPool, layer);
-                strcpy(Editor.FirstLayer->Name, "Test Layer");
-                animation_frame* Frame = AllocateEmptyAnimationFrame(&Editor.BitmapPool, Editor.BitmapWidth, Editor.BitmapHeight);
-                Editor.FirstLayer->SelectedFrame = Editor.FirstLayer->FirstFrame = Editor.FirstLayer->LastFrame = Frame;
-                FillBitmap(&Editor.FirstLayer->FirstFrame->Bitmap, 0x00000000);
+                layer* FirstLayer = AddLayer(&Editor, LayerType_Plain);
+                strcpy(FirstLayer->Name, "Plain Layer");
+
+                animation_frame Frame = {};
+                Frame.BitmapIndex = AllocateEmptyBitmap(&Editor, BitmapType_Plain);
+                AddFrameToLayer(FirstLayer, Frame);
+
+                bitmap* Bitmap = GetBitmapByIndex(&Editor, Frame.BitmapIndex);
+                FillBitmap(&Editor, Frame.BitmapIndex, 0x00000000);
                 UpdateWindowTitle(Window, &Editor);
 
                 NewWidth = 4;
@@ -419,25 +422,25 @@ int main(int, char**)
                     Editor.PixelDim = V2(NewDim, NewDim);
                 }
 
-                layer* Layer = Editor.FirstLayer;
-                if(Layer)
+                if(Editor.LayerCount)
                 {
-                    bitmap Bitmap = Editor.FirstLayer->SelectedFrame->Bitmap;
+                    // TODO: multiple layers
+                    animation_frame Frame = Editor.Layers[0].Frames[Editor.SelectedFrameIndex];
                     ImVec2 WindowPos = ImGui::GetWindowPos();
                     v2 PixelDim = Editor.PixelDim;
                     v2 Offset = Editor.CameraOffset + WindowPos + V2(30, 30);
 
                     v2 MousePos = ImGui::GetMousePos();
-                    rect2 BitmapRect = GetBitmapRectTranslated(&Bitmap, PixelDim, Offset);
+                    rect2 BitmapRect = GetBitmapRectTranslated(&Editor, Offset);
                     bool MouseInRect = InRect(MousePos, BitmapRect);
 
                     ImDrawList* DrawList = ImGui::GetWindowDrawList();
-                    for(u32 Y = 0; Y < Bitmap.Height; Y++)
+                    for(u32 Y = 0; Y < Editor.BitmapHeight; Y++)
                     {
-                        for(u32 X = 0; X < Bitmap.Width; X++)
+                        for(u32 X = 0; X < Editor.BitmapWidth; X++)
                         {
                             v2 DrawOffset = Offset + X * V2(PixelDim.x, 0) + Y * V2(0, PixelDim.y);
-                            u32 Color = GetPixelColor(&Bitmap, X, Y);
+                            u32 Color = GetPixelColor(&Editor, Frame.BitmapIndex, X, Y);
                             DrawList->AddRectFilled(DrawOffset, DrawOffset + PixelDim, Editor.BitmapBgColor);
                             DrawList->AddRectFilled(DrawOffset, DrawOffset + PixelDim, Color);
                         }
@@ -461,7 +464,7 @@ int main(int, char**)
                         DrawList->AddRect(HighlightOffset, HighlightOffset + PixelDim, 0xFF0000FF, 0, 0, Thickness);
                         if(ImGui::IsWindowHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left))
                         {
-                            SetPixelColor(&Bitmap, X, Y, Editor.CurrentColor);
+                            SetPixelColor(&Editor, Frame.BitmapIndex, X, Y, Editor.CurrentColor);
                         }
                     }
                 }
@@ -533,8 +536,7 @@ int main(int, char**)
         {
             if(ImGui::Begin("Timeline", &Editor.TimelineVisible))
             {
-                layer* Layer = Editor.FirstLayer;
-                if(Layer)
+                if(Editor.LayerCount)
                 {
                     if(Editor.Animating)
                     {
@@ -552,50 +554,49 @@ int main(int, char**)
                         }
                     }
 
+                    // TODO: only first layer for now!
+                    layer* Layer = &Editor.Layers[0];
+
                     ImGui::Text(Layer->Name);
                     ImGui::SameLine();
-                    animation_frame* Frame = Layer->FirstFrame;
-                    u32 FrameCount = 1;
                     char FrameCountStr[3];
 
-                    while(Frame)
+                    for(u32 FrameIndex = 0; FrameIndex < Layer->FrameCount; FrameIndex++)
                     {
-                        snprintf(FrameCountStr, sizeof(FrameCountStr), "%d", FrameCount);
-                        bool Selected = Layer->SelectedFrame == Frame;
+                        animation_frame Frame = Layer->Frames[FrameIndex];
+                        snprintf(FrameCountStr, sizeof(FrameCountStr), "%d", FrameIndex + 1);
+
+                        // TODO: now we only check for bitmap index = should check for frame?
+                        animation_frame SelectedFrame = Layer->Frames[Editor.SelectedFrameIndex];
+                        bool Selected = SelectedFrame.BitmapIndex == Frame.BitmapIndex;
+
                         // TODO: hard coded sizes
                         if(ImGui::Selectable(FrameCountStr, Selected, 0, ImVec2(10, 20)) && !Editor.Animating)
                         {
-                            Layer->SelectedFrame = Frame;
+                            Editor.SelectedFrameIndex = FrameIndex;
                         }
 
-                        FrameCount++;
-                        Frame = Frame->NextFrame;
                         ImGui::SameLine();
                     }
 
                     if(ImGui::Button("+") && !Editor.Animating)
                     {
-                        animation_frame* NewFrame = AllocateEmptyAnimationFrame(&Editor.BitmapPool, Editor.BitmapWidth, Editor.BitmapHeight);
-                        NewFrame->PrevFrame = Layer->LastFrame;
-                        Layer->LastFrame->NextFrame = NewFrame;
-                        Layer->LastFrame = NewFrame;
+                        // TODO: shoud probably have option for copy previous frame
+                        animation_frame Frame = {};
+                        Frame.BitmapIndex = AllocateEmptyBitmap(&Editor, BitmapType_Plain);
+
+                        AddFrameToLayer(Layer, Frame);
                     }
 
                     if(Editor.Animating)
                     {
-                        u32 FrameTimeMs = 250;
+                        u32 FrameTimeMs = 100;
                         u32 Difference = Editor.Ticks - Editor.CurrentFrameTicks;
                         if(Difference >= FrameTimeMs)
                         {
                             Editor.CurrentFrameTicks = Editor.Ticks;
-                            if(Layer->SelectedFrame->NextFrame)
-                            {
-                                Layer->SelectedFrame = Layer->SelectedFrame->NextFrame;
-                            }
-                            else
-                            {
-                                Layer->SelectedFrame = Layer->FirstFrame;
-                            }
+                            Editor.SelectedFrameIndex += 1;
+                            Editor.SelectedFrameIndex = Editor.SelectedFrameIndex % Layer->FrameCount;
                         }
                     }
                 }
